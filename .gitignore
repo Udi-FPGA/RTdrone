@@ -1,0 +1,7 @@
+work/ARTYmic_Proj/*
+IP/xfft_0/*
+!IP/xfft_0/xfft_0.xci
+IP/ila_0/*
+!IP/ila_0/ila_0.xci
+IP/clk_wiz_0/*
+!IP/clk_wiz_0/clk_wiz_0.xci
