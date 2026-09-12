@@ -67,7 +67,7 @@ always @(posedge clk or negedge rstn)
     else if (pcm_valid) FFTcount <= FFTcount + 1;
     
 wire [31 : 0] s_axis_data_tdata  = {16'h0000,PCM_Out}; //input wire [31 : 0] s_axis_data_tdata    
-wire s_axis_data_tvalid  = (FFTcount[14] && (FFTcount[2:0]==3'b111) && pcm_valid) ? 1'b1 : 1'b0;        //input wire s_axis_data_tvalid            
+wire s_axis_data_tvalid  = (FFTcount[13] && (FFTcount[2:0]==3'b111) && pcm_valid) ? 1'b1 : 1'b0;        //input wire s_axis_data_tvalid            
  wire s_axis_data_tready;         //output wire s_axis_data_tready           
 wire s_axis_data_tlast  = (FFTcount[13:3] == 11'h7FF) ? 1'b1 : 1'b0;           //input wire s_axis_data_tlast             
  wire [31 : 0] m_axis_data_tdata ; //output wire [31 : 0] m_axis_data_tdata   
