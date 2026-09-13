@@ -1,5 +1,11 @@
 work/MyUDP_Proj/*
+IP/axis_data_fifo_0/*
+!IP/axis_data_fifo_0/axis_data_fifo_0.xci
 IP/ila_0/*
 !IP/ila_0/ila_0.xci
 IP/ila_1/*
 !IP/ila_1/ila_1.xci
+IP/ila_2/*
+!IP/ila_2/ila_2.xci
+IP/ila_3/*
+!IP/ila_3/ila_3.xci

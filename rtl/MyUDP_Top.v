@@ -50,6 +50,15 @@ module MyUDP_Top(
     output wire       led6,
     output wire       led7,
 
+    input gpio_ja1 ,  //;# PMOD JA pin 1 LOC G13  MIC data
+//    input gpio_ja2 ,  //;# PMOD JA pin 2 LOC B11
+//    input gpio_ja3 ,  //;# PMOD JA pin 3 LOC A11
+//    output gpio_ja4 ,  //;# PMOD JA pin 4 LOC D12 MIC clk
+    output gpio_ja7 ,  //;# PMOD JA pin 7 LOC D13
+//    input gpio_ja8 ,  //;# PMOD JA pin 8 LOC B18
+//    input gpio_ja9 ,  //;# PMOD JA pin 9 LOC A18
+//    input gpio_ja10,  //;# PMOD JA pin 10LOC K16
+
     /*
      * Ethernet: 100BASE-T MII
      */
@@ -86,6 +95,8 @@ clk_ibufg_inst(
 
 wire clk_25mhz_mmcm_out;
 wire clk_25mhz_int;
+wire clk_50mhz_mmcm_out;
+wire clk_50mhz_int;
 
 // MMCM instance
 // 100 MHz in, 125 MHz out
@@ -94,6 +105,7 @@ wire clk_25mhz_int;
 // M = 10, D = 1 sets Fvco = 1000 MHz (in range)
 // Divide by 8 to get output frequency of 125 MHz
 // Divide by 40 to get output frequency of 25 MHz
+// Divide by 20 to get output frequency of 50 MHz
 // 1000 / 5 = 200 MHz
 MMCME2_BASE #(
     .BANDWIDTH("OPTIMIZED"),
@@ -103,7 +115,7 @@ MMCME2_BASE #(
     .CLKOUT1_DIVIDE(40),
     .CLKOUT1_DUTY_CYCLE(0.5),
     .CLKOUT1_PHASE(0),
-    .CLKOUT2_DIVIDE(1),
+    .CLKOUT2_DIVIDE(20),
     .CLKOUT2_DUTY_CYCLE(0.5),
     .CLKOUT2_PHASE(0),
     .CLKOUT3_DIVIDE(1),
@@ -135,7 +147,7 @@ clk_mmcm_inst (
     .CLKOUT0B(),
     .CLKOUT1(clk_25mhz_mmcm_out),
     .CLKOUT1B(),
-    .CLKOUT2(),
+    .CLKOUT2(clk_50mhz_mmcm_out),
     .CLKOUT2B(),
     .CLKOUT3(),
     .CLKOUT3B(),
@@ -159,6 +171,11 @@ clk_25mhz_bufg_inst (
     .O(clk_25mhz_int)
 );
 
+BUFG
+clk_50mhz_bufg_inst (
+    .I(clk_50mhz_mmcm_out),
+    .O(clk_50mhz_int)
+);
 sync_reset #(
     .N(4)
 )
@@ -167,7 +184,6 @@ sync_reset_inst (
     .rst(~mmcm_locked),
     .out(rst_int)
 );
-
 // GPIO
 wire [3:0] btn_int;
 wire [3:0] sw_int;
@@ -185,17 +201,39 @@ debounce_switch_inst (
     .out({btn_int,
         sw_int})
 );
+reg [3:0] ClkCount;
+always @(posedge clk_50mhz_int) ClkCount <= ClkCount + 1;
+assign gpio_ja7 =  ClkCount[3];
 
-wire uart_rxd_int;
+wire  ce = (ClkCount == 3'b111) ? 1'b1 : 1'b0;       // 3.072MHz Enable מה-TOP  //input  wire                  ce,        // 3.072MHz Enable מה-TOP   
+wire        signal = gpio_ja1;    // כבר מסונכרן מה-TOP      //input  wire                  signal,    // כבר מסונכרן מה-TOP       
+wire [15:0] PCM_Out;                              //output reg  [OUT_BITS-1:0]   PCM_Out,                               
+wire        pcm_valid  ;                          //output reg                   pcm_valid                              
 
-sync_signal #(
-    .WIDTH(1),
-    .N(2)
-)
-sync_signal_inst (
-    .clk(clk_int),
-    .in({uart_rxd}),
-    .out({uart_rxd_int})
+CIC_filter #(
+    .N        (3 ),              
+    .R        (64),             
+    .OUT_BITS (16)       
+) CIC_filter_inst (
+    .clk      (clk_50mhz_int),       
+    .rst      (rst_int),       // Active-High
+    .ce       (ce),            // 3.072MHz Enable מה-TOP
+    .in_valid (1'b1),  
+    .signal   (signal),        // כבר מסונכרן מה-TOP
+    .PCM_Out  (PCM_Out),   
+    .pcm_valid(pcm_valid)  
+);
+
+//----------- Begin Cut here for INSTANTIATION Template ---// INST_TAG
+ila_2 ila_2_inst (
+	.clk(clk_50mhz_int), // input wire clk
+
+	.probe0(ClkCount), // input wire [3:0]  probe0  
+	.probe1(ce), // input wire [0:0]  probe1 
+	.probe2(signal), // input wire [0:0]  probe2 
+	.probe3(PCM_Out), // input wire [15:0]  probe3 
+	.probe4(pcm_valid), // input wire [0:0]  probe4
+	.probe5(rst_int) // input wire [0:0]  probe5
 );
 
 assign phy_ref_clk = clk_25mhz_int;
@@ -231,6 +269,12 @@ core_inst (
     .led5(led5),
     .led6(led6),
     .led7(led7),
+    
+    /* MIC input */
+    .clk_50mhz_int(clk_50mhz_int)  ,
+    .PCM_Out  (PCM_Out),   
+    .pcm_valid(pcm_valid),  
+
     /*
      * Ethernet: 100BASE-T MII
      */

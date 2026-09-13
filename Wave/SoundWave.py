@@ -39,7 +39,7 @@ try:
 
             # Multiply by a gain factor (e.g., 50x)
             # Make sure to clip it so it doesn't distort (wrap around)
-            audio_samples = np.clip(audio_samples * 256, -32768, 32767).astype(np.int16)
+            audio_samples = np.clip(audio_samples * 64, -32768, 32767).astype(np.int16)
             
             # Convert to 'int32' just for the print statement to avoid the int16 bounds error
             print_samples = audio_samples[:5].astype(np.int32)

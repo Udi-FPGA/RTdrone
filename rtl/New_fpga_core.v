@@ -37,6 +37,11 @@ module fpga_core #
     output wire       led6,
     output wire       led7,
 
+    /* MIC input */
+    input  wire  clk_50mhz_int  ,
+    input  wire [15:0] PCM_Out  ,                              
+    input  wire        pcm_valid,           
+                    
     /* Ethernet: 100BASE-T MII */
     input  wire       phy_rx_clk,
     input  wire [3:0] phy_rxd,
@@ -136,29 +141,77 @@ wire [15:0] gen_dest_port = 16'd1234;
 wire [15:0] gen_src_port  = 16'd5678;
 //wire [15:0] gen_payload_len = 16'd50; // Bytes of data
 wire [15:0] gen_payload_len = 16'h0200; // Bytes of data
-
 wire [7:0] gen_tdata;
-wire       gen_tvalid;
+//wire       gen_tvalid;
+reg       gen_tvalid;
 wire       gen_tready;
 wire       gen_tlast;
-reg [19:0] Debounce;
-always @(posedge clk or posedge rst)
-    if (rst) Debounce <= 20'hFFFFF;
-     else if (Debounce != 20'hFFFFF) Debounce <= Debounce + 1;
-     else if (btn[0]) Debounce <= 20'h00000;
-wire trigger = (Debounce == 20'h00002) ? 1'b1 : 1'b0;     
-udp_data_gen #(
-    .DATA_WIDTH(8)
-) udp_gen_inst (
-    .clk(clk),
-    .rst(rst),
-    .trigger(trigger),//btn[0]), // Press Button 0 to send
-    .packet_len(gen_payload_len),
-    .m_axis_tdata(gen_tdata),
-    .m_axis_tvalid(gen_tvalid),
-    .m_axis_tready(gen_tready),
-    .m_axis_tlast(gen_tlast)
+
+    /* MIC input */
+reg[2:0] Devpcm_valid;
+always @(posedge clk_50mhz_int or posedge rst)
+    if (rst) Devpcm_valid <= 3'b000;
+     else Devpcm_valid <= {Devpcm_valid[1:0],pcm_valid};
+wire  s_axis_tvalid      = ((Devpcm_valid==3'b001) || (Devpcm_valid== 3'b010)) ? 1'b1 : 1'b0;
+wire  s_axis_tready      ;
+wire  [7:0] s_axis_tdata = (Devpcm_valid==3'b001) ? PCM_Out[15:8] :
+                           (Devpcm_valid==3'b010) ? PCM_Out[7:0]  : 8'h00;
+wire m_axis_tvalid             ;
+wire m_axis_tready = gen_tready ;
+wire [7:0] m_axis_tdata        ;
+wire [31:0] axis_rd_data_count ;
+
+//----------- Begin Cut here for INSTANTIATION Template ---// INST_TAG
+ila_3 ila_3_inst (
+	.clk(clk_50mhz_int), // input wire clk
+
+	.probe0(pcm_valid), // input wire [0:0]  probe0  
+	.probe1(PCM_Out), // input wire [15:0]  probe1 
+	.probe2(Devpcm_valid), // input wire [2:0]  probe2 
+	.probe3(s_axis_tvalid), // input wire [0:0]  probe3 
+	.probe4(s_axis_tready), // input wire [0:0]  probe4 
+	.probe5(s_axis_tdata), // input wire [7:0]  probe5 
+	.probe6(axis_rd_data_count) // input wire [31:0]  probe6
 );
+                           
+//----------- Begin Cut here for INSTANTIATION Template ---// INST_TAG
+axis_data_fifo_0 axis_data_fifo_0_inst (
+  .s_axis_aresetn(!rst),  // input wire s_axis_aresetn
+  .s_axis_aclk(clk_50mhz_int),        // input wire s_axis_aclk
+  .s_axis_tvalid(s_axis_tvalid),    // input wire s_axis_tvalid
+  .s_axis_tready(s_axis_tready),    // output wire s_axis_tready
+  .s_axis_tdata(s_axis_tdata),      // input wire [7 : 0] s_axis_tdata
+  .m_axis_aclk(clk),        // input wire m_axis_aclk
+  .m_axis_tvalid(m_axis_tvalid),    // output wire m_axis_tvalid
+  .m_axis_tready(m_axis_tready),    // input wire m_axis_tready
+  .m_axis_tdata(m_axis_tdata),      // output wire [7 : 0] m_axis_tdata
+  .axis_rd_data_count(axis_rd_data_count)  // output wire [31 : 0] axis_rd_data_count
+);
+assign gen_tlast = ((axis_rd_data_count == 32'h00000002)&&gen_tready&&gen_tvalid) ? 1'b1 : 1'b0;
+//reg [19:0] Debounce;
+//always @(posedge clk or posedge rst)
+//    if (rst) Debounce <= 20'hFFFFF;
+//     else if (Debounce != 20'hFFFFF) Debounce <= Debounce + 1;
+//     else if (btn[0]) Debounce <= 20'h00000;
+//wire trigger = (Debounce == 20'h00002) ? 1'b1 : 1'b0;     
+wire trigger = (axis_rd_data_count == gen_payload_len) ? 1'b1 : 1'b0;     
+always @(posedge clk or posedge rst)
+    if (rst) gen_tvalid <= 1'b0;
+     else if (trigger)   gen_tvalid <= 1'b1;
+     else if (gen_tlast) gen_tvalid <= 1'b0;
+assign gen_tdata = m_axis_tdata;     
+//udp_data_gen #(
+//    .DATA_WIDTH(8)
+//) udp_gen_inst (
+//    .clk(clk),
+//    .rst(rst),
+//    .trigger(trigger),//btn[0]), // Press Button 0 to send
+//    .packet_len(gen_payload_len),
+//    .m_axis_tdata(gen_tdata),
+//    .m_axis_tvalid(gen_tvalid),
+//    .m_axis_tready(gen_tready),
+//    .m_axis_tlast(gen_tlast)
+//);
 
 //----------- Begin Cut here for INSTANTIATION Template ---// INST_TAG
 ila_0 ila_0_Inst (
@@ -168,7 +221,8 @@ ila_0 ila_0_Inst (
 	.probe1(gen_tdata), // input wire [7:0]  probe1 
 	.probe2(gen_tvalid), // input wire [0:0]  probe2 
 	.probe3(gen_tready), // input wire [0:0]  probe3 
-	.probe4(gen_tlast) // input wire [0:0]  probe4
+	.probe4(gen_tlast), // input wire [0:0]  probe4
+	.probe5(axis_rd_data_count) // input wire [31:0]  probe5
 );
 // Header control: Alex's stack needs a pulse on hdr_valid to start
 reg tx_hdr_valid_reg = 0;
